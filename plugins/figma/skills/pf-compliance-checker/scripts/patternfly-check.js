@@ -9,27 +9,34 @@ import fetch from 'node-fetch';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { exec } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load Figma token from config
+// Load Figma token from env var or config file
 const CONFIG_PATH = path.join(__dirname, 'figma-config.env');
-let FIGMA_TOKEN = '';
+let FIGMA_TOKEN = process.env.FIGMA_TOKEN || '';
 
-try {
-  const configContent = fs.readFileSync(CONFIG_PATH, 'utf-8');
-  const tokenMatch = configContent.match(/FIGMA_TOKEN=(.+)/);
-  if (tokenMatch) {
-    FIGMA_TOKEN = tokenMatch[1].trim();
-  } else {
-    console.error('Error: FIGMA_TOKEN not found in figma-config.env');
-    process.exit(1);
-  }
-} catch (error) {
-  console.error(`Error loading config file: ${error.message}`);
-  console.error(`Expected location: ${CONFIG_PATH}`);
+if (!FIGMA_TOKEN) {
+  try {
+    const configContent = fs.readFileSync(CONFIG_PATH, 'utf-8');
+    const tokenMatch = configContent.match(/FIGMA_TOKEN=(.+)/);
+    if (tokenMatch) {
+      FIGMA_TOKEN = tokenMatch[1].trim();
+    }
+  } catch {}
+}
+
+if (!FIGMA_TOKEN) {
+  console.error('Error: set FIGMA_TOKEN env var or create figma-config.env next to this script');
+  console.error(`Expected fallback location: ${CONFIG_PATH}`);
   process.exit(1);
+}
+
+function escapeHtml(str) {
+  if (typeof str !== 'string') return str;
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 // PatternFly v6 Design Tokens
@@ -646,8 +653,8 @@ class ComplianceReport {
   <div class="container">
     <div class="header">
       <h1>PatternFly v6 Compliance Report</h1>
-      <p><strong>File:</strong> ${this.fileName}</p>
-      <p><strong>Date:</strong> ${this.date}</p>
+      <p><strong>File:</strong> ${escapeHtml(this.fileName)}</p>
+      <p><strong>Date:</strong> ${escapeHtml(this.date)}</p>
     </div>
 
     <div class="score-section">
@@ -720,10 +727,10 @@ class ComplianceReport {
       priorityFixes.forEach((pattern, index) => {
         html += `
       <div class="finding critical">
-        <strong>#${index + 1}: ${pattern.category} - ${pattern.count} instances</strong>
-        <p>${pattern.issue}</p>
-        ${pattern.fix ? `<p><strong>→ Fix:</strong> ${pattern.fix}</p>` : ''}
-        <p><em>Examples: ${pattern.examples.join(', ')}${pattern.count > 3 ? ` +${pattern.count - 3} more` : ''}</em></p>
+        <strong>#${index + 1}: ${escapeHtml(pattern.category)} - ${pattern.count} instances</strong>
+        <p>${escapeHtml(pattern.issue)}</p>
+        ${pattern.fix ? `<p><strong>→ Fix:</strong> ${escapeHtml(pattern.fix)}</p>` : ''}
+        <p><em>Examples: ${pattern.examples.map(e => escapeHtml(e)).join(', ')}${pattern.count > 3 ? ` +${pattern.count - 3} more` : ''}</em></p>
       </div>
 `;
       });
@@ -774,16 +781,16 @@ ${this.generateTableOfContents()}
         const categoryScore = this.getCategoryScore(category);
         const scoreClass = categoryScore >= 80 ? 'high' : categoryScore >= 60 ? 'medium' : 'low';
         html += `
-      <h3>${category} <span class="component-score ${scoreClass}">${categoryScore}% compliant</span></h3>
+      <h3>${escapeHtml(category)} <span class="component-score ${scoreClass}">${categoryScore}% compliant</span></h3>
 `;
         criticalByCategory[category].forEach(finding => {
           const figmaLink = finding.figmaLink ?
-            `<p><a href="${finding.figmaLink}" target="_blank" class="figma-link">🔗 Open in Figma</a></p>` : '';
+            `<p><a href="${escapeHtml(finding.figmaLink)}" target="_blank" class="figma-link">🔗 Open in Figma</a></p>` : '';
           html += `
       <div class="finding critical">
-        <strong>${finding.component}</strong>
-        <p>${finding.issue}</p>
-        ${finding.fix ? `<p><strong>→ Fix:</strong> ${finding.fix}</p>` : ''}
+        <strong>${escapeHtml(finding.component)}</strong>
+        <p>${escapeHtml(finding.issue)}</p>
+        ${finding.fix ? `<p><strong>→ Fix:</strong> ${escapeHtml(finding.fix)}</p>` : ''}
         ${figmaLink}
       </div>
 `;
@@ -817,16 +824,16 @@ ${this.generateTableOfContents()}
         const categoryScore = this.getCategoryScore(category);
         const scoreClass = categoryScore >= 80 ? 'high' : categoryScore >= 60 ? 'medium' : 'low';
         html += `
-      <h3>${category} <span class="component-score ${scoreClass}">${categoryScore}% compliant</span></h3>
+      <h3>${escapeHtml(category)} <span class="component-score ${scoreClass}">${categoryScore}% compliant</span></h3>
 `;
         warningByCategory[category].forEach(finding => {
           const figmaLink = finding.figmaLink ?
-            `<p><a href="${finding.figmaLink}" target="_blank" class="figma-link">🔗 Open in Figma</a></p>` : '';
+            `<p><a href="${escapeHtml(finding.figmaLink)}" target="_blank" class="figma-link">🔗 Open in Figma</a></p>` : '';
           html += `
       <div class="finding warning">
-        <strong>${finding.component}</strong>
-        <p>${finding.issue}</p>
-        ${finding.fix ? `<p><strong>→ Recommendation:</strong> ${finding.fix}</p>` : ''}
+        <strong>${escapeHtml(finding.component)}</strong>
+        <p>${escapeHtml(finding.issue)}</p>
+        ${finding.fix ? `<p><strong>→ Recommendation:</strong> ${escapeHtml(finding.fix)}</p>` : ''}
         ${figmaLink}
       </div>
 `;
@@ -930,7 +937,7 @@ ${this.generateTableOfContents()}
       <ul>
 `;
         compliantByCategory[category].forEach(finding => {
-          html += `        <li><strong>${finding.component}:</strong> ${finding.issue}</li>\n`;
+          html += `        <li><strong>${escapeHtml(finding.component)}:</strong> ${escapeHtml(finding.issue)}</li>\n`;
         });
         html += `      </ul>\n`;
       });
@@ -1003,8 +1010,8 @@ ${this.generateTableOfContents()}
         <strong>Mixed usage: "Delete" (${this.microcopy.deleteVsRemove.delete.length}) vs "Remove" (${this.microcopy.deleteVsRemove.remove.length})</strong>
         <p>PatternFly guideline: Use "Delete" for permanent removal, "Remove" for non-destructive actions.</p>
         <p><strong>→ Recommendation:</strong> Review each usage and apply consistently.</p>
-        <p><em>Delete buttons: ${this.microcopy.deleteVsRemove.delete.slice(0, 3).map(d => d.text).join(', ')}${this.microcopy.deleteVsRemove.delete.length > 3 ? '...' : ''}</em></p>
-        <p><em>Remove buttons: ${this.microcopy.deleteVsRemove.remove.slice(0, 3).map(d => d.text).join(', ')}${this.microcopy.deleteVsRemove.remove.length > 3 ? '...' : ''}</em></p>
+        <p><em>Delete buttons: ${this.microcopy.deleteVsRemove.delete.slice(0, 3).map(d => escapeHtml(d.text)).join(', ')}${this.microcopy.deleteVsRemove.delete.length > 3 ? '...' : ''}</em></p>
+        <p><em>Remove buttons: ${this.microcopy.deleteVsRemove.remove.slice(0, 3).map(d => escapeHtml(d.text)).join(', ')}${this.microcopy.deleteVsRemove.remove.length > 3 ? '...' : ''}</em></p>
       </div>
 `;
       }
@@ -1060,7 +1067,7 @@ ${this.generateTableOfContents()}
               fix: f.fix,
               figmaLink: f.figmaLink
             }))
-          }, null, 2)};
+          }, null, 2).replace(/<\//g, '<\\/')};
 
           const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
           const url = URL.createObjectURL(blob);
@@ -1071,7 +1078,7 @@ ${this.generateTableOfContents()}
         }
 
         function copyFigmaLinks() {
-          const links = ${JSON.stringify(allViolations.map(f => f.figmaLink).filter(Boolean))};
+          const links = ${JSON.stringify(allViolations.map(f => f.figmaLink).filter(Boolean)).replace(/<\//g, '<\\/')};
           navigator.clipboard.writeText(links.join('\\n'));
           alert('Copied ' + links.length + ' Figma links to clipboard!');
         }
@@ -1169,13 +1176,7 @@ function isPatternFlyComponent(node) {
     const componentName = name;
 
     // Common PatternFly component naming patterns
-    const pfPatterns = [
-      'pf-', 'patternfly', 'red hat',
-      // Component types
-      'button', 'card', 'modal', 'alert', 'table',
-      'navigation', 'nav', 'breadcrumb', 'pagination',
-      'tabs', 'accordion', 'wizard', 'drawer', 'tooltip'
-    ];
+    const pfPatterns = ['pf-', 'patternfly', 'red hat'];
 
     return pfPatterns.some(pattern => componentName.includes(pattern));
   }
@@ -1183,14 +1184,21 @@ function isPatternFlyComponent(node) {
   return false;
 }
 
+// Check if component instance is detached from library
+function checkIfDetached(node) {
+  if (node.type !== 'INSTANCE') return false;
+  return !node.componentId;
+}
+
 // Get component source info
 function getComponentSource(node) {
-  if (node.type === 'INSTANCE' && node.componentId) {
+  const detached = checkIfDetached(node);
+  if (node.type === 'INSTANCE') {
     return {
       isInstance: true,
-      isPatternFly: isPatternFlyComponent(node),
-      componentId: node.componentId,
-      isDetached: checkIfDetached(node)
+      isPatternFly: detached ? false : isPatternFlyComponent(node),
+      componentId: node.componentId || null,
+      isDetached: detached
     };
   }
   return {
@@ -1199,19 +1207,6 @@ function getComponentSource(node) {
     componentId: null,
     isDetached: false
   };
-}
-
-// Check if component instance is detached from library
-function checkIfDetached(node) {
-  if (node.type !== 'INSTANCE') return false;
-
-  // In Figma API, detached instances lose some properties
-  // Check for common signs of detachment
-  if (!node.componentId) return true;
-
-  // If component has overrides that affect structure, it may be detached
-  // This is a heuristic - actual detection requires comparing to main component
-  return false; // Conservative - would need full component data to confirm
 }
 
 // Detect component state from name
@@ -2686,7 +2681,9 @@ async function analyzeFigmaFile(fileUrl) {
     fs.writeFileSync(outputPath, html, 'utf-8');
 
     console.log(`\n✓ Report saved to: ${outputPath}`);
-    console.log(`  Open this file in your browser to view the full report.`);
+
+    const openCmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
+    exec(`${openCmd} "${outputPath}"`, () => {});
 
     return report;
   } catch (error) {
